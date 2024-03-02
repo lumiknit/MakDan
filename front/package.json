@@ -1,0 +1,51 @@
+{
+	"name": "makdan-front",
+  "private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"author": {
+		"name": "lumiknit",
+		"email": "aasr4r4@gmail.com"
+	},
+	"license": "MIT",
+	"homepage": "https://github.com/lumiknit/MakDan#readme.md",
+	"description": "makdan front",
+	"keywords": [
+		"makdan",
+		"editor",
+		"markdown",
+		"repl",
+		"web",
+		"utility"
+	],
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"size-report": "npx vite-bundle-visualizer",
+		"format": "npx prettier --write .",
+		"test": "vitest",
+		"preview": "vite preview",
+		"check": "svelte-check --tsconfig ./tsconfig.json"
+	},
+	"devDependencies": {
+		"@sveltejs/vite-plugin-svelte": "^3.0.2",
+		"@tsconfig/svelte": "^5.0.2",
+		"@typescript-eslint/eslint-plugin": "^7.1.0",
+		"eslint": "^8.57.0",
+		"eslint-plugin-svelte": "^2.35.1",
+		"prettier": "^3.2.5",
+		"prettier-plugin-svelte": "^3.2.2",
+		"sass": "^1.71.1",
+		"svelte": "^4.2.11",
+		"svelte-check": "^3.6.4",
+		"svelte-preprocess": "^5.1.3",
+		"tslib": "^2.6.2",
+		"typescript": "^5.2.2",
+		"vite": "^5.1.4",
+		"vite-bundle-visualizer": "^1.0.1",
+		"vitest": "^1.3.1"
+	},
+	"dependencies": {
+		"@tabler/icons-svelte": "^2.47.0"
+	}
+}
