@@ -1,0 +1,11 @@
+/* Dark mode color variables */
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--c-fg: #fff;
+		--c-bg: #000;
+		--c-dim: #606060;
+		--c-primary: #e36d6d;
+		--c-secondary: #a3c3a3;
+	}
+}

@@ -1,0 +1,28 @@
+@import "./light-colors.scss";
+@import "./dark-colors.scss";
+
+:root {
+	--f-sans: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+	--f-serif: "Georgia", "Times New Roman", Times, serif;
+	--f-mono: "Menlo", "Monaco", "Consolas", "Courier New", monospace;
+
+	font-family: var(--f-sans);
+	line-height: 1.2;
+	font-weight: 400;
+
+	color-scheme: light dark;
+	color: var(--c-fg);
+	background-color: var(--c-bg);
+
+	font-size: 16px;
+
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+}
