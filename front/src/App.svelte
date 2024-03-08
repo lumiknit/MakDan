@@ -1,15 +1,27 @@
 <script lang="ts">
-	import { MDRoot } from "./md";
+	import { onMount } from "svelte";
+	import "./domi";
+	import { mountEditor } from "./md";
+
+	let rootDiv: HTMLDivElement;
+
+onMount(() => {
+	mountEditor(rootDiv);
+});
 </script>
 
 <div class="container">
-	<MDRoot />
+	<div class="md-root" bind:this={rootDiv} />
 </div>
 
 <style>
-	div.container {
-		margin: 2rem auto;
-		width: 100%;
-		max-width: 40rem;
+	.container {
+		max-width: 800px;
+		margin: 0 auto;
+	}
+	div.md-root {
+		border: 1px solid #ccc;
+		min-height: 1rem;
+		padding: 1rem;
 	}
 </style>
