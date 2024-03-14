@@ -1,20 +1,20 @@
-import { assignNodeID, getNodeByID, getNodeID, type IDStore, type NodeID } from "./id";
+import { assignElemID, type IDStore } from "./id";
 
 // -- Types
 
 // Operation Type Enum
 export enum OpType {
 	UpdateText,
-	InsertNode,
-	DeleteNode,
+	InsertElem,
+	DeleteElem,
 }
 
 // Operations
 
-// Replace the textContent in the text node
+// Replace the first text node's text content
 export type OpUpdateText = {
 	type: OpType.UpdateText;
-	nodeID: NodeID;
+	elem: HTMLElement;
 
 	// Update index
 	offset: number;
@@ -25,32 +25,33 @@ export type OpUpdateText = {
 };
 
 // Insert a node into the parent node
-export type OpInsertNode = {
-	type: OpType.InsertNode;
-	nodeID: NodeID;
-} & (
-	| { parentID: NodeID } // Inserted as the first child of the parent
-	| { nextID: NodeID } // Inserted before the next node
-);
+export type OpInsertElem = {
+	type: OpType.InsertElem;
+	elem: HTMLElement;
+	parent: HTMLElement;
+	next: undefined | null | Node;
+	// Undefined: Insert as the first child of the parent
+	// Null: Insert as the last child of the parent
+	// Otherwise, Insert before the next node
+};
 
 // Delete a node
-export type OpDeleteNode = {
-	type: OpType.DeleteNode;
-	nodeID: NodeID;
-} & (
-	| { parentID: NodeID } // Removed the first child of the parent
-	| { nextID: NodeID } // Removed before the next node
-);
+export type OpDeleteElem = {
+	type: OpType.DeleteElem;
+	elem: HTMLElement;
+	parent: HTMLElement;
+	next: null | Node;
+};
 
-export type Operation = OpUpdateText | OpInsertNode | OpDeleteNode;
+export type Operation = OpUpdateText | OpInsertElem | OpDeleteElem;
 
 // Batch related types
 
 // Selection range
 export type Range = {
-	anchorID: NodeID;
+	anchorNode: Node;
 	anchorOffset: number;
-	focusID: NodeID;
+	focusNode: Node;
 	focusOffset: number;
 };
 
@@ -78,9 +79,9 @@ type Context = IDStore & History;
 const initialBatch = (): Batch => ({
 	ops: [],
 	range: {
-		anchorID: 0,
+		anchorNode: null as any,
 		anchorOffset: 0,
-		focusID: 0,
+		focusNode: null as any,
 		focusOffset: 0,
 	},
 });
@@ -104,130 +105,169 @@ const getSelection = (): Selection => {
 export const currentRange = (): Range => {
 	// Get selection
 	const sel = getSelection();
-	return sel.anchorNode === null || sel.focusNode === null
-		? {
-				anchorID: 0,
-				anchorOffset: 0,
-				focusID: 0,
-				focusOffset: 0,
-			}
-		: {
-				anchorID: getNodeID(sel.anchorNode),
-				anchorOffset: sel.anchorOffset,
-				focusID: getNodeID(sel.focusNode),
-				focusOffset: sel.focusOffset,
-			};
+	if (sel.anchorNode === null) throw new Error("No anchor node");
+	const focusNode = sel.focusNode || sel.anchorNode;
+	const focusOffset =
+		sel.focusNode === null ? sel.anchorOffset : sel.focusOffset;
+	return {
+		anchorNode: sel.anchorNode,
+		anchorOffset: sel.anchorOffset,
+		focusNode,
+		focusOffset,
+	};
 };
 
-const doOp = (ctx: Context, op: Operation): void => {
+// Getter for text nodes
+
+const getInnerTextNode = (elem: HTMLElement): Node => {
+	// Try to get the first node
+	const node = elem.firstChild;
+	if (node === null) {
+		// If the element is empty, create a text node
+		const textNode = document.createTextNode("");
+		elem.appendChild(textNode);
+		return textNode;
+	}
+	if (node.nodeType !== Node.TEXT_NODE) {
+		throw new Error("First child is not a text node");
+	}
+	return node;
+};
+
+const getElem = (node: Node): HTMLElement => {
+	if (node.nodeType === Node.TEXT_NODE) {
+		if (node.parentNode === null) {
+			throw new Error("Text node has no parent");
+		}
+		node = node.parentNode;
+	}
+	if (node.nodeType !== Node.ELEMENT_NODE) {
+		throw new Error("Not an element node");
+	}
+	return node as HTMLElement;
+};
+
+const doOp = (op: Operation): void => {
 	// Execute the operation in forward
-	const node = getNodeByID(ctx, op.nodeID);
 	switch (op.type) {
 		case OpType.UpdateText: {
-			const text = node.textContent || "";
-			node.textContent =
+			const textNode = getInnerTextNode(op.elem);
+			const text = textNode.textContent || "";
+			textNode.textContent =
 				text.slice(0, op.offset) +
 				op.after +
 				text.slice(op.offset + op.before.length);
 			break;
 		}
-		case OpType.InsertNode: {
-			if ("parentID" in op) {
-				console.log(op);
-				const parent = getNodeByID(ctx, op.parentID);
-				parent.insertBefore(node, parent.firstChild);
-			} else {
-				const next = getNodeByID(ctx, op.nextID);
-				next.parentNode!.insertBefore(node, next);
-			}
+		case OpType.InsertElem: {
+			op.parent.insertBefore(
+				op.elem,
+				op.next === undefined ? op.parent.firstChild : op.next,
+			);
 			break;
 		}
-		case OpType.DeleteNode: {
-			node.parentNode!.removeChild(node);
+		case OpType.DeleteElem: {
+			op.parent.removeChild(op.elem);
 			break;
 		}
 	}
 };
 
-const undoOp = (ctx: Context, op: Operation): void => {
+const undoOp = (op: Operation): void => {
 	// Execute the operation in backward
-	const node = getNodeByID(ctx, op.nodeID);
 	switch (op.type) {
 		case OpType.UpdateText: {
-			const text = node.textContent || "";
-			node.textContent =
+			const textNode = getInnerTextNode(op.elem);
+			const text = textNode.textContent || "";
+			textNode.textContent =
 				text.slice(0, op.offset) +
 				op.before +
 				text.slice(op.offset + op.after.length);
 			break;
 		}
-		case OpType.InsertNode: {
-			node.parentNode!.removeChild(node);
+		case OpType.InsertElem: {
+			op.parent.removeChild(op.elem);
 			break;
 		}
-		case OpType.DeleteNode: {
-			if ("parentID" in op) {
-				const parent = getNodeByID(ctx, op.parentID);
-				parent.insertBefore(node, parent.firstChild);
-			} else {
-				const next = getNodeByID(ctx, op.nextID);
-				next.parentNode!.insertBefore(node, next);
-			}
+		case OpType.DeleteElem: {
+			op.parent.insertBefore(op.elem, op.next);
 			break;
 		}
 	}
 };
 
 export const undo = (ctx: Context): void => {
-	console.log(ctx.pastBatches);
+	// First of all, flush current batch
+	flushBatch(ctx);
+
+	// Check if there is any batch to undo
 	if (ctx.pastBatches.length <= 1) {
 		return;
 	}
+
+	// Pop the last batch
 	console.log("[domi] undo");
 	const batch = ctx.pastBatches.pop()!;
 	ctx.futBatches.push(batch);
+
+	// Undo each operation in the batch
 	for (let i = batch.ops.length - 1; i >= 0; i--) {
-		undoOp(ctx, batch.ops[i]);
+		undoOp(batch.ops[i]);
 	}
+
 	// Move the range to the previous batch
 	const prevRange = ctx.pastBatches[ctx.pastBatches.length - 1].range;
 	const sel = getSelection();
-	const anchor = getNodeByID(ctx, prevRange.anchorID);
-	const focus = getNodeByID(ctx, prevRange.focusID);
 	sel.setBaseAndExtent(
-		anchor,
+		prevRange.anchorNode,
 		prevRange.anchorOffset,
-		focus,
+		prevRange.focusNode,
 		prevRange.focusOffset,
 	);
 };
 
 export const redo = (ctx: Context): void => {
+	// First of all, flush current batch
+	flushBatch(ctx);
+
+	// Check if there is any batch to redo
 	if (ctx.futBatches.length <= 0) {
 		return;
 	}
+
+	// Pop the next batch
 	console.log("[domi] redo");
 	const batch = ctx.futBatches.pop()!;
 	ctx.pastBatches.push(batch);
+
+	// Redo each operation in the batch
 	for (const op of batch.ops) {
-		doOp(ctx, op);
+		doOp(op);
 	}
+
 	// Move the range to the next batch
 	const nextRange = batch.range;
 	const sel = getSelection();
-	const anchor = getNodeByID(ctx, nextRange.anchorID);
-	const focus = getNodeByID(ctx, nextRange.focusID);
 	sel.setBaseAndExtent(
-		anchor,
+		nextRange.anchorNode,
 		nextRange.anchorOffset,
-		focus,
+		nextRange.focusNode,
 		nextRange.focusOffset,
 	);
 };
 
-const pushOpToBatch = (ctx: Context, op: Operation): void => {
+export const freezeHistory = (ctx: Context): void => {
+	// Flush current batch
+	flushBatch(ctx);
+
+	// Remove all history
+	ctx.pastBatches = [ctx.curBatch];
+	ctx.futBatches = [];
+};
+
+const pushOp = (ctx: Context, op: Operation, dry?: boolean): void => {
 	ctx.curBatch.ops.push(op);
-	doOp(ctx, op);
+	if (!dry) doOp(op);
 };
 
 const mergeOpUpdateTextToPrev = (
@@ -242,7 +282,7 @@ const mergeOpUpdateTextToPrev = (
 	const nextEnd = next.offset + next.before.length;
 
 	// If node is different, or updated range is not overlapped, cannot merge
-	if (prev.nodeID !== next.nodeID || prevEnd < nextStart || nextEnd < prevStart)
+	if (prev.elem !== next.elem || prevEnd < nextStart || nextEnd < prevStart)
 		return false;
 
 	let before = prev.before;
@@ -269,14 +309,19 @@ export const insertText = (
 	node: Node,
 	offset: number,
 	text: string,
+	dry?: boolean,
 ): void =>
-	pushOpToBatch(ctx, {
-		type: OpType.UpdateText,
-		nodeID: getNodeID(node),
-		offset,
-		before: "",
-		after: text,
-	});
+	pushOp(
+		ctx,
+		{
+			type: OpType.UpdateText,
+			elem: getElem(node),
+			offset,
+			before: "",
+			after: text,
+		},
+		dry,
+	);
 
 export const deleteText = (
 	ctx: Context,
@@ -285,56 +330,76 @@ export const deleteText = (
 	length: number,
 ): void => {
 	const text = (node.textContent || "").slice(offset, offset + length);
-	pushOpToBatch(ctx, {
+	pushOp(ctx, {
 		type: OpType.UpdateText,
-		nodeID: getNodeID(node),
+		elem: getElem(node),
 		offset,
 		before: text,
 		after: "",
 	});
 };
 
-export const insertNodeAtFirst = (
+export const insertElem = (
 	ctx: Context,
-	node: Node,
-	parent: Node,
-): void =>
-	pushOpToBatch(ctx, {
-		type: OpType.InsertNode,
-		nodeID: assignNodeID(ctx, node),
-		parentID: getNodeID(parent),
-	});
+	elem: HTMLElement,
+	parent: HTMLElement,
+	next?: HTMLElement | null,
+	dry?: boolean,
+): void => {
+	assignElemID(ctx, elem);
+	pushOp(
+		ctx,
+		{
+			type: OpType.InsertElem,
+			elem,
+			parent,
+			next,
+		},
+		dry,
+	);
+};
 
-export const insertNodeBefore = (ctx: Context, node: Node, next: Node): void =>
-	pushOpToBatch(ctx, {
-		type: OpType.InsertNode,
-		nodeID: assignNodeID(ctx, node),
-		nextID: getNodeID(next),
-	});
+export const insertElemFirst = (
+	ctx: Context,
+	elem: HTMLElement,
+	parent: HTMLElement,
+	dry?: boolean,
+): void => insertElem(ctx, elem, parent, undefined, dry);
 
-export const deleteNode = (ctx: Context, node: Node): void => {
-	const o: {
-		type: OpType.DeleteNode;
-		nodeID: NodeID;
-	} = {
-		type: OpType.DeleteNode,
-		nodeID: assignNodeID(ctx, node),
-	};
-	const next = node.nextSibling;
-	const deleteOp: OpDeleteNode =
-		next === null
-			? { ...o, parentID: getNodeID(node.parentNode!) }
-			: { ...o, nextID: getNodeID(next) };
-	return pushOpToBatch(ctx, deleteOp);
+export const insertElemLast = (
+	ctx: Context,
+	elem: HTMLElement,
+	parent: HTMLElement,
+	dry?: boolean,
+): void => insertElem(ctx, elem, parent, null, dry);
+
+export const deleteElem = (
+	ctx: Context,
+	elem: HTMLElement,
+	dry?: boolean,
+): void => {
+	return pushOp(ctx, {
+		type: OpType.DeleteElem,
+		elem,
+		parent: elem.parentElement!,
+		next: elem.nextSibling,
+	});
 };
 
 export const flushBatch = (history: History, range?: Range): void => {
+	if (history.curBatch.ops.length <= 0) {
+		// Nothing to flush
+		return;
+	}
 	// First of all, group updateText operations if possible
 	const ops: Operation[] = [];
 	for (const op of history.curBatch.ops) {
 		if (ops.length > 0 && op.type === OpType.UpdateText) {
 			const lastOp = ops[ops.length - 1];
-			if (lastOp.type === OpType.UpdateText && mergeOpUpdateTextToPrev(lastOp, op)) {
+			if (
+				lastOp.type === OpType.UpdateText &&
+				mergeOpUpdateTextToPrev(lastOp, op)
+			) {
 				continue;
 			}
 		}

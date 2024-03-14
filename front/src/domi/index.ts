@@ -1,21 +1,17 @@
 export * from "./utils";
 
-export {
-	type NodeID,
-	type IDStore,
-	getNodeID,
-	getNodeByID,
-	deleteNodeByID,
-} from "./id";
+export { type ElemID, type IDStore, assignElemID, getElemID } from "./id";
 
 export {
 	undo,
 	redo,
+	freezeHistory,
 	insertText,
 	deleteText,
-	insertNodeAtFirst,
-	insertNodeBefore,
-	deleteNode,
+	insertElem,
+	insertElemFirst,
+	insertElemLast,
+	deleteElem,
 	flushBatch,
 } from "./operation";
 

@@ -1,0 +1,5 @@
+// After md-block add a single space
+
+.md-block:empty:after {
+	content: "\200B";
+}
